@@ -76,7 +76,7 @@ F1 = \frac {2\times Precision\times Recall}{Precision+Recall}
 
 \section{赛题分析}
 
-\subsection{技术路线 (2020.06.23)}
+\subsection{技术路线}
 
 \begin{itemize}
 	\item 每个太阳黑子群都有一张磁场观测图像和白光观测图像，是\textbf{双模态的图像分类问题}。每个太阳黑子对应的两张图像的大小是相同的，可以合并为一个双通道的输入。
@@ -84,4 +84,182 @@ F1 = \frac {2\times Precision\times Recall}{Precision+Recall}
 	\item 三个类别的图像数量不一样，是\textbf{类别不平衡问题}。备选方案有两种，一是过采样，二是更改损失函数。由于三个类别数据的数量差距不是很悬殊，估计这一块的影响不是很大，初期简单过采样即可。
 \end{itemize}
 
+
+\subsection{参赛日记}
+\subsubsection{2020.06.16}
+最初打算先尝试使用ResNet50进行finetune。为了满足ResNet50的输入条件，人工构造了三通道的输入数据，即con/75000，mag/5000+1以及两者相加 con/75000+mag/5000+1。这样处理是因为continuum数据集中的min≈200、max≈73000，而mag数据集中min≈-5000、max≈5000。Finetune时，首先使用ImageNet上训练ResNet50作为BaseModel（去掉全连接），然后接上Global Max Pooling、Global Mean Pooling或SPP层，发现都不收敛。之后换了VGG-16、MobileNet等模型进行尝试，也均不收敛。此时排除了模型的问题，认为可能是数据导致这一问题。
+
+\subsubsection{2020.06.17}
+仔细观察数据集中的图像，发现magnetogram的图像存在很多噪声，严重影响了类别的辨识度，用人眼也很难分辨出各种类型的太阳黑子。而con-tinuum的图像类别辨识度比较高，基本上alpha、beta和betax都有明显的区分度，于是修改TFRecord，仅使用continuum重新进行训练。此处设计了三个实验：
+
+\begin{itemize}
+	\item 不对continuum数据做任何处理
+	\item 对continuum数据进行归一化处理
+	\item 对continuum数据进行截断、降噪、归一化
+\end{itemize}
+其中，实验二的公式为：
+\begin{equation}
+I' = \frac {I-min(I)}{max(I)-min(I)}
+\end{equation}
+实验三的公式为：
+\begin{equation}
+I' = -\frac {clip(I, min(I), mean(I)-2500)}{mean(I)-2500-min(I)} + 1 \label{equation:exam3}
+\end{equation}
+
+实验发现归一化和降噪处理不能解决该数据的收敛问题，训练过程中的准确率曲线呈现周期性大幅波动，如下图所示：
+
+
+\begin{figure}[h]
+	\centering
+	\subfigure[实验二的准确率曲线]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig3_a.png}
+			\label{fig3_a}
+		\end{minipage}%
+	}%
+	\subfigure[实验三的准确率曲线]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig3_b.png}
+			\label{fig3_b}
+		\end{minipage}%
+	}%
+	\centering
+	\caption{实验二和实验三的准确率曲线}
+\end{figure}
+
+
+\subsubsection{2020.06.18}
+在昨天的实验三中，处理后的数据从视觉上看已经非常易于区分了，但模型训练仍然不收敛，怀疑是这个数据集在可变输入大小的设置下无法训练。查阅资料得知，无论是全局平均池化和SPP层都是可以训练收敛的，但这个数据集和别的数据集的区别是，别的数据集上输入的图像虽然每个批次大小都不同，但大体上整张图像都是待识别的目标；而在这个数据集中，待识别的太阳黑子仅占输入图像很小的一部分，输入的大部分都是噪声。可能就是这个原因导致了训练不收敛。
+
+对于这一问题有两个方法可以尝试，一种是将图像切割成固定的大小，一种是人工从图像中提取特征。这里首先尝试的是第二种方法，如下图所示，左侧是原始输入图像，右侧是按公式\ref{equation:exam3}处理后的图像。
+
+\begin{figure}[h]
+	\centering
+	\subfigure[原始输入图像]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig4_1.png}
+			\label{fig4_a}
+		\end{minipage}%
+	}%
+	\subfigure[按公式\ref{equation:exam3}处理后的图像]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig4_2.png}
+			\label{fig4_b}
+		\end{minipage}%
+	}%
+	\centering
+	\caption{处理前后的太阳黑子图像 (continuum)}
+\end{figure}
+
+观察数据时还发现，有许多图像拍摄到了宇宙背景，宇宙背景和太阳黑子的观测数值类似，这会对图像的切割造成影响。如下图所示。
+
+\begin{figure}[h]
+	\centering
+	\subfigure[原始输入图像]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig5_1.png}
+			\label{fig5_a}
+		\end{minipage}%
+	}%
+	\subfigure[按公式\ref{equation:exam3}处理后的图像]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig5_2.png}
+			\label{fig5_b}
+		\end{minipage}%
+	}%
+	\centering
+	\label{fig5}
+	\caption{处理前后的太阳黑子图像-宇宙背景 (continuum)}
+\end{figure}
+
+图\ref{fig5_b}沿x轴方向的方差以及方差的梯度如下所示：
+
+\begin{figure}[h]
+	\centering
+	\subfigure[图\ref{fig5_b}的x轴方差]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig6_1.png}
+			\label{fig6_a}
+		\end{minipage}%
+	}%
+	\subfigure[图\ref{fig5_b}的x轴方差的梯度]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig6_2.png}
+			\label{fig6_b}
+		\end{minipage}%
+	}%
+	\centering
+	\caption{图\ref{fig5_b}沿x轴方向的方差以及方差的梯度}
+\end{figure}
+
+为消除宇宙背景对方差和梯度造成的影响，首先对图\ref{fig5_b}进行二值化（太阳=0，太阳黑子和宇宙背景=1），再对该图像的四个角取10*10的小区域计算均值，若均值>0.9，则认为这个角是宇宙背景。
+
+于是从这个角出发，使用洪泛法进行填充（太阳=0，太阳黑子=1，宇宙背景=2）。再次二值化，得到一个蒙版（太阳与太阳黑子=1，宇宙背景=0）。将蒙版与图\ref{fig5_b}相乘，得到了最终的图像（图\ref{fig8}）。
+
+\begin{figure}[h]
+	\centering
+	\subfigure[图\ref{fig5_a}二值化]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig7_1.png}
+			\label{fig7_a}
+		\end{minipage}%
+	}%
+	\subfigure[图\ref{fig7_a}洪泛法得到的蒙版]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig7_2.png}
+			\label{fig7_b}
+		\end{minipage}%
+	}%
+	\centering
+	\caption{二值化与洪泛法处理}
+\end{figure} 
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=7cm]{fig8.png}
+	\caption{最终得到的图像}
+	\label{fig8}
+\end{figure}
+
+
+对图\ref{fig8}重新计算沿x轴方向的方差以及方差的梯度，结果如下图所示。经过这样处理，每张图像都转换为了长度为1200的两个向量，可以使用一个简单的全连接神经网络进行分类。
+
+
+\begin{figure}[h]
+	\centering
+	\subfigure[图\ref{fig8}的x轴方差]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig9_1.png}
+			\label{fig9_a}
+		\end{minipage}%
+	}%
+	\subfigure[图\ref{fig8}的x轴方差的梯度]{
+		\begin{minipage}[t]{0.5\linewidth}
+			\centering
+			\includegraphics[height=4cm]{fig9_2.png}
+			\label{fig9_b}
+		\end{minipage}%
+	}%
+	\centering
+	\caption{图8沿x轴方向的方差以及方差的梯度}
+\end{figure}
+
+\subsubsection{2020.06.19}
+今天对数据集的具体信息进行了统计：
+\begin{itemize}
+	\item alpha、beta、betax三类样本的文件数目分别4709、7353、2407
+	\item 
+	\item 
+\end{itemize}
 \end{document}
