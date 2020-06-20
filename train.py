@@ -19,7 +19,7 @@ def read_and_decode(filename):
     width = tf.cast(temp['width'], tf.int64)
     height = tf.cast(temp['height'], tf.int64)
 
-    image = tf.reshape(image, tf.convert_to_tensor([width, height, 3]))
+    image = tf.reshape(image, tf.convert_to_tensor([width, height, 1]))
     # image = tf.image.random_flip_left_right(image) # 随机左右翻转
     # image = tf.image.random_flip_up_down(image) # 随机上下翻转
     label = tf.cast(temp['label'], tf.int64)
@@ -28,7 +28,7 @@ def read_and_decode(filename):
 
 def load_train_set():
     with tf.name_scope('input_train'):
-        image_train, label_train = read_and_decode("dataset/tfrecord/train_avgpool.tfrecord")
+        image_train, label_train = read_and_decode("dataset/tfrecord/train_con_processed_avgpool.tfrecord")
         image_batch_train, label_batch_train = tf.train.batch(
             [image_train, label_train], batch_size=batch_size, capacity=2048, num_threads=4, dynamic_pad=True
         )
@@ -37,7 +37,7 @@ def load_train_set():
 
 def load_valid_set():
     with tf.name_scope('input_valid'):
-        image_valid, label_valid = read_and_decode("dataset/tfrecord/valid_avgpool.tfrecord")
+        image_valid, label_valid = read_and_decode("dataset/tfrecord/valid_con_processed_avgpool.tfrecord")
         image_batch_valid, label_batch_valid = tf.train.batch(
             [image_valid, label_valid], batch_size=batch_size, capacity=2048, num_threads=4, dynamic_pad=True
         )

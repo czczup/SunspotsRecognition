@@ -5,7 +5,7 @@ from operator import mul
 
 class Model(object):
     def __init__(self):
-        self.image = tf.placeholder(tf.float32, [None, None, None, 3], name='image')
+        self.image = tf.placeholder(tf.float32, [None, None, None, 1], name='image')
 
         with tf.name_scope("label"):
             self.label = tf.placeholder(tf.int32, [None], name='label')
@@ -16,20 +16,18 @@ class Model(object):
 
         self.output = self.network(self.image)
 
-        self.prediction = tf.layers.dense(self.output, units=3)
+        self.loss = self.get_loss(self.output, self.one_hot)
 
-        self.loss = self.get_loss(self.prediction, self.one_hot)
-
-        self.batch_size = 32
+        self.batch_size = 256
         with tf.name_scope('correct_prediction'):
-            correct_prediction = tf.equal(tf.argmax(self.prediction, 1), tf.argmax(self.one_hot, 1))
+            correct_prediction = tf.equal(tf.argmax(self.output, 1), tf.argmax(self.one_hot, 1))
         with tf.name_scope('accuracy'):
             self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             tf.summary.scalar('train_accuracy', self.accuracy)
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.optimizer = tf.train.AdamOptimizer(1e-3).minimize(self.loss, global_step=self.global_step)
+            self.optimizer = tf.train.AdamOptimizer(1e-5).minimize(self.loss, global_step=self.global_step)
 
         self.merged = tf.summary.merge_all()
         print("网络初始化成功")
@@ -61,31 +59,30 @@ class Model(object):
     def network(self, image):
         with tf.name_scope("ResNet"):
             with tf.name_scope('stage1'):
-                conv = self.conv2d(image, 3, 32, 7, 1)
+                image = tf.nn.max_pool(image, [1, 2, 2, 1], [1, 2, 2, 1], padding="SAME")
+                conv = self.conv2d(image, 1, 16, 7, 1)
                 bn = tf.layers.batch_normalization(conv, axis=3, training=self.training)
                 relu = tf.nn.relu(bn)
-                print(relu)
-            with tf.name_scope('stage2'):
                 pool = tf.nn.max_pool(relu, [1, 3, 3, 1], [1, 2, 2, 1], padding="SAME")
-                res = self.residual(pool, [32, 16, 16, 64], 1, with_shortcut=True)
-                print(res)
+            with tf.name_scope('stage2'):
+                res = self.residual(pool, [16, 8, 8, 32], 1, with_shortcut=True)
             with tf.name_scope('stage3'):
-                res = self.residual(res, [64, 32, 32, 128], 2, with_shortcut=True)
-                print(res)
+                res = self.residual(res, [32, 16, 16, 64], 2, with_shortcut=True)
             with tf.name_scope('stage4'):
-                res = self.residual(res, [128, 64, 64, 256], 2, with_shortcut=True)
-                print(res)
+                res = self.residual(res, [64, 32, 32, 128], 2, with_shortcut=True)
             with tf.name_scope('stage5'):
-                res = self.residual(res, [256, 128, 128, 512], 2, with_shortcut=True)
-            with tf.name_scope('stage6'):
-                res = self.residual(res, [512, 256, 256, 1024], 2, with_shortcut=True)
-                print(res)
-                pool = self.global_max_pooling(res)
-                print(pool)
-        return pool
+                res = self.residual(res, [128, 64, 64, 256], 2, with_shortcut=True)
+            pool = self.global_max_pooling(res)
+            output = tf.layers.dense(pool, units=3)
+        return output
 
     def global_max_pooling(self, x):
         return tf.reduce_max(x, [1, 2])
+
+
+    def global_mean_pooling(self, x):
+        return tf.reduce_mean(x, [1, 2])
+
 
     def get_loss(self, output_concat, onehot):
         with tf.name_scope("loss"):

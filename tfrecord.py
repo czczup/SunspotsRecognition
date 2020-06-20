@@ -10,41 +10,76 @@ warnings.filterwarnings('ignore')
 
 type2id = {"alpha": 0, "beta": 1, "betax": 2}
 
-def get_data(path, sunspot_type):
-    dir1 = path + "/magnetogram/" + sunspot_type
-    dir2 = path + "/continuum/" + sunspot_type
-    filenames = os.listdir(dir1)
+
+def get_data_original(path, sunspot_type):
+    dir = path + "/continuum/" + sunspot_type
+    filenames = os.listdir(dir)[:50]
     train_data, valid_data = [], []
     for filename in tqdm(filenames):
-        file_path1 = dir1 + "/" + filename
+        filepath = dir + "/" + filename
         sunspot_id = int(filename.split(".")[2])
-        hdul_magnetogram = fits.open(file_path1)
-        hdul_magnetogram.verify('fix')
-        data_magnetogram = hdul_magnetogram[1].data / 10000.0 + 0.5
-        data_magnetogram = pool2d(data_magnetogram, 2, 2, 0, 'avg')
-        data_magnetogram = data_magnetogram.astype(np.float32)
-        file_path2 = dir2 + "/" + filename.replace("magnetogram", "continuum")
-        hudl_continuum = fits.open(file_path2)
-        hudl_continuum.verify('fix')
-        data_continuum = hudl_continuum[1].data / 75000.0
-        data_continuum = pool2d(data_continuum, 2, 2, 0, 'avg')
-        data_continuum = data_continuum.astype(np.float32)
-        data_sum = (data_continuum + data_magnetogram) / 2.0
+        hdul = fits.open(filepath)
+        hdul.verify('fix')
+        data = hdul[1].data
+        data = pool2d(data, 2, 2, 0, 'avg')
+        data = data.astype(np.float32)
         if sunspot_id >= 5800:
-            valid_data.append([np.dstack((data_magnetogram, data_continuum, data_sum)), type2id[sunspot_type]])
+            valid_data.append([data, type2id[sunspot_type]])
         else:
-            train_data.append([np.dstack((data_magnetogram, data_continuum, data_sum)), type2id[sunspot_type]])
+            train_data.append([data, type2id[sunspot_type]])
+    return train_data, valid_data
+
+
+def get_data_normalized(path, sunspot_type):
+    dir = path + "/continuum/" + sunspot_type
+    filenames = os.listdir(dir)
+    train_data, valid_data = [], []
+    for filename in tqdm(filenames):
+        filepath = dir + "/" + filename
+        sunspot_id = int(filename.split(".")[2])
+        hdul = fits.open(filepath)
+        hdul.verify('fix')
+        data = hdul[1].data
+        min_, max_ = np.min(data), np.max(data)
+        data = (data - min_) / (max_ - min_)
+        data = pool2d(data, 2, 2, 0, 'avg')
+        data = data.astype(np.float32)
+        if sunspot_id >= 5800:
+            valid_data.append([data, type2id[sunspot_type]])
+        else:
+            train_data.append([data, type2id[sunspot_type]])
+    return train_data, valid_data
+
+
+def get_data_processed(path, sunspot_type):
+    dir = path + "/continuum/" + sunspot_type
+    filenames = os.listdir(dir)
+    train_data, valid_data = [], []
+    for filename in tqdm(filenames):
+        filepath = dir + "/" + filename
+        sunspot_id = int(filename.split(".")[2])
+        hdul = fits.open(filepath)
+        hdul.verify('fix')
+        data = hdul[1].data
+        min_, mean_= np.min(data), np.mean(data)
+        data = - (np.clip(data, min_, mean_ - 2500) - min_) / (mean_ - 2500 - min_) + 1
+        data = pool2d(data, 2, 2, 0, 'max')
+        data = data.astype(np.float32)
+        if sunspot_id >= 5800:
+            valid_data.append([data, type2id[sunspot_type]])
+        else:
+            train_data.append([data, type2id[sunspot_type]])
     return train_data, valid_data
 
 
 def generate_tfrecord(type, data, tfrecord_file):
-    x = np.array([item[0] for item in data]).reshape(-1, 1)
+    x = [item[0] for item in data]
     y = [item[1] for item in data]
     if type == "train":
         ros = RandomOverSampler(random_state=0)
         x, y = ros.fit_sample(x, y)
     x = x.reshape(-1)
-
+    print(x.shape)
     with tf.io.TFRecordWriter(tfrecord_file) as writer:
         for i in tqdm(range(len(x))):
             image, label = x[i], y[i]
@@ -73,19 +108,21 @@ def pool2d(A, kernel_size, stride, padding, pool_mode='max'):
 
 
 if __name__ == '__main__':
-    train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha")
+    train_alpha, valid_alpha = get_data_original(path="dataset/trainset", sunspot_type="alpha")
     print(len(train_alpha), len(valid_alpha))
-    train_beta, valid_beta = get_data(path="dataset/trainset", sunspot_type="beta")
+    train_beta, valid_beta = get_data_original(path="dataset/trainset", sunspot_type="beta")
     print(len(train_beta), len(valid_beta))
-    train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax")
+    train_betax, valid_betax = get_data_original(path="dataset/trainset", sunspot_type="betax")
     print(len(train_betax), len(valid_betax))
     train_data = train_alpha + train_beta + train_betax
     valid_data = valid_alpha + valid_beta + valid_betax
     print(len(train_data), len(valid_data))
     np.random.shuffle(train_data)
+    np.random.shuffle(train_data)
     np.random.shuffle(valid_data)
-    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_avgpool.tfrecord")
-    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_avgpool.tfrecord")
+    np.random.shuffle(valid_data)
+    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/1.tfrecord")
+    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/2.tfrecord")
 
 
 
