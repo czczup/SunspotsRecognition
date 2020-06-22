@@ -5,7 +5,7 @@ from operator import mul
 
 class Model(object):
     def __init__(self):
-        self.image = tf.placeholder(tf.float32, [None, 224, 224, 2], name='image')
+        self.image = tf.placeholder(tf.float32, [None, 224, 224, 1], name='image')
 
         with tf.name_scope("label"):
             self.label = tf.placeholder(tf.int32, [None], name='label')
@@ -27,7 +27,7 @@ class Model(object):
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.optimizer = tf.train.AdamOptimizer(1e-4).minimize(self.loss, global_step=self.global_step)
+            self.optimizer = tf.train.GradientDescentOptimizer(1e-4).minimize(self.loss, global_step=self.global_step)
 
         self.merged = tf.summary.merge_all()
         print("网络初始化成功")
