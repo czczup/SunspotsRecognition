@@ -5,6 +5,7 @@ import os
 import warnings
 from tqdm import tqdm
 from PIL import Image
+import random
 warnings.filterwarnings('ignore')
 
 type2id = {"alpha": 0, "beta": 1, "betax": 2}
@@ -98,12 +99,15 @@ def generate_tfrecord(type, data, tfrecord_file):
 
 
 if __name__ == '__main__':
-    train_alpha, valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
-    print(len(train_alpha), len(valid_alpha))
-    train_beta, valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
-    print(len(train_beta), len(valid_beta))
-    train_betax, valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
-    print(len(train_betax), len(valid_betax))
+
+    # train_alpha, valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
+    # print(len(train_alpha), len(valid_alpha))
+    # train_beta, valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
+    # print(len(train_beta), len(valid_beta))
+    # train_betax, valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
+    # print(len(train_betax), len(valid_betax))
+
+
     # train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="magnetogram",
     #                                     MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
     # print(len(train_alpha), len(valid_alpha))
@@ -112,7 +116,31 @@ if __name__ == '__main__':
     # print(len(train_beta), len(valid_beta))
     # train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="magnetogram",
     #                                     MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
+    # print(len(train_betax), len(valid_betax))
+
+
+    train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
+                                        MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    print(len(train_alpha), len(valid_alpha))
+    train_beta, valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
+                                      MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    print(len(train_beta), len(valid_beta))
+    train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
+                                        MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
     print(len(train_betax), len(valid_betax))
+
+
+    len_train_alpha = len(train_alpha)
+    len_train_beta = len(train_beta)
+    len_train_betax = len(train_betax)
+    max_class_num = max(len_train_alpha, max(len_train_beta, len_train_betax))
+    for i in range(max_class_num - len_train_alpha):
+        train_alpha.append(train_alpha[random.randint(0, len_train_alpha)])
+    for i in range(max_class_num - len_train_beta):
+        train_beta.append(train_beta[random.randint(0, len_train_beta)])
+    for i in range(max_class_num - len_train_betax):
+        train_betax.append(train_betax[random.randint(0, len_train_betax)])
+    print(len(train_alpha), len(train_beta), len(train_betax))
     train_data = train_alpha + train_beta + train_betax
     valid_data = valid_alpha + valid_beta + valid_betax
     print(len(train_data), len(valid_data))
@@ -120,7 +148,7 @@ if __name__ == '__main__':
     np.random.shuffle(train_data)
     np.random.shuffle(valid_data)
     np.random.shuffle(valid_data)
-    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_all_224.tfrecord")
-    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_all_224.tfrecord")
+    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_continuum_oversample_224.tfrecord")
+    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_continuum_oversample_224.tfrecord")
 
 

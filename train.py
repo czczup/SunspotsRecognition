@@ -37,7 +37,7 @@ def read_and_decode(filename):
     }
     temp = tf.parse_single_example(serialized_example, feature_description)
     image = tf.decode_raw(temp['image'], tf.float32)
-    image = tf.reshape(image, [224, 224, 2])
+    image = tf.reshape(image, [224, 224, 1])
     image = tf.image.random_flip_left_right(image) # 随机左右翻转
     image = tf.image.random_flip_up_down(image) # 随机上下翻转
     label = tf.cast(temp['label'], tf.int64)
@@ -46,7 +46,7 @@ def read_and_decode(filename):
 
 def load_train_set():
     with tf.name_scope('input_train'):
-        image_train, label_train = read_and_decode("dataset/tfrecord/train_all_224.tfrecord")
+        image_train, label_train = read_and_decode("dataset/tfrecord/train_continuum_oversample_224.tfrecord")
         image_batch_train, label_batch_train = tf.train.shuffle_batch(
             [image_train, label_train], batch_size=batch_size, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
@@ -55,9 +55,9 @@ def load_train_set():
 
 def load_valid_set():
     with tf.name_scope('input_valid'):
-        image_valid, label_valid = read_and_decode("dataset/tfrecord/valid_all_224.tfrecord")
+        image_valid, label_valid = read_and_decode("dataset/tfrecord/valid_continuum_oversample_224.tfrecord")
         image_batch_valid, label_batch_valid = tf.train.shuffle_batch(
-            [image_valid, label_valid], batch_size=2048, capacity=5120, num_threads=4, min_after_dequeue=3000
+            [image_valid, label_valid], batch_size=512, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
     return image_batch_valid, label_batch_valid
 
@@ -120,19 +120,21 @@ def get_all_data(path, sunspot_type):
 
 def train(model):
     # network
-    amount = 14469
+    amount = 12492 # without random over sample
+    # amount = 19289 # with random over sample
+
     image_batch_train, label_batch_train = load_train_set()
     image_batch_valid, label_batch_valid = load_valid_set()
 
-    valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
-    valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
-    valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
-    # valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
-    #                        MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    # valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
-    #                       MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    # valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
-    #                        MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    # valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
+    # valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
+    # valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
+    valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
+                           MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
+                          MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
+                           MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
     valid_data = valid_alpha + valid_beta + valid_betax
 
     # Adaptive use of GPU memory.
@@ -184,7 +186,7 @@ def train(model):
                                                                                   amount // batch_size, acc_train,
                                                                                   acc_valid),
                       'time %.3fs' % (time.time() - time1))
-            if step % 50 == 0:
+            if step % 100 == 0:
                 print("Save the model Successfully")
                 saver.save(sess, "models/"+dirId+"/model.ckpt", global_step=step)
                 test(valid_data, sess, model)

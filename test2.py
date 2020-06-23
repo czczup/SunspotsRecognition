@@ -169,7 +169,7 @@ if __name__ == '__main__':
     softmax = []
     correct = 0
     for i in range(1977):
-        softmax.append((np.array(softmax1[i]+np.array(softmax2[i]))/2))
+        softmax.append(np.array(softmax1[i])+np.array(softmax2[i]))
     outputs = np.argmax(softmax, 1)
     for index, y_hat in enumerate(outputs):
         if y_hat == valid_data1[index][1]:
