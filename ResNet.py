@@ -62,9 +62,9 @@ class Model(object):
                 conv = self.conv2d(image, 1, 16, 7, 2)
                 bn = tf.layers.batch_normalization(conv, axis=3, training=self.training, momentum=0.95)
                 relu = tf.nn.relu(bn)
-                pool = tf.nn.max_pool(relu, [1, 3, 3, 1], [1, 2, 2, 1], padding="SAME")
-                print(pool)
+                print(relu)
             with tf.name_scope('stage2'):
+                pool = tf.nn.max_pool(relu, [1, 3, 3, 1], [1, 2, 2, 1], padding="SAME")
                 res = self.residual(pool, [16, 8, 8, 32], 1, with_shortcut=True)
                 print(res)
             with tf.name_scope('stage3'):
@@ -76,14 +76,14 @@ class Model(object):
             with tf.name_scope('stage5'):
                 res = self.residual(res, [128, 64, 64, 256], 2, with_shortcut=True)
                 print(res)
-            pool = self.global_mean_pooling(res)
+            pool = self.global_average_pooling(res)
             output = tf.layers.dense(pool, units=3)
         return output
 
     def global_max_pooling(self, x):
         return tf.reduce_max(x, [1, 2])
 
-    def global_mean_pooling(self, x):
+    def global_average_pooling(self, x):
         return tf.reduce_mean(x, [1, 2])
 
     def get_loss(self, output_concat, onehot):
