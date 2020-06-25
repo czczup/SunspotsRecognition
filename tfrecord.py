@@ -13,7 +13,7 @@ CONTINUUM_MAX_VALUE = 73367
 CONTINUUM_MIN_VALUE = 206
 MAGNETOGRAM_MAX_VALUE = 2000
 MAGNETOGRAM_MIN_VALUE = -2000
-
+IMAGE_SIZE = 320
 
 def center_crop(image, x, y):
     width, height = image.size[0], image.size[1]
@@ -40,7 +40,7 @@ def get_data(path, sunspot_type, data_type, MIN_VALUE, MAX_VALUE):
         data = (data - MIN_VALUE) / (MAX_VALUE - MIN_VALUE) * 255
         data = data.astype(np.uint8)
         image = Image.fromarray(data)
-        image = center_crop(image, 320, 320)
+        image = center_crop(image, IMAGE_SIZE, IMAGE_SIZE)
         data = np.array(image, dtype=np.float32) / 255.0
         if sunspot_id >= 5800:
             valid_data.append([data, type2id[sunspot_type]])
@@ -63,7 +63,7 @@ def get_all_data(path, sunspot_type):
         data1 = (data1 - CONTINUUM_MIN_VALUE) / (CONTINUUM_MAX_VALUE - CONTINUUM_MIN_VALUE) * 255
         data1 = data1.astype(np.uint8)
         image1 = Image.fromarray(data1)
-        image1 = center_crop(image1, 224, 224)
+        image1 = center_crop(image1, IMAGE_SIZE, IMAGE_SIZE)
         data1 = np.array(image1, dtype=np.float32) / 255.0
 
         filepath2 = filepath1.replace("continuum", "magnetogram")
@@ -74,7 +74,7 @@ def get_all_data(path, sunspot_type):
         data2 = (data2 - MAGNETOGRAM_MIN_VALUE) / (MAGNETOGRAM_MAX_VALUE - MAGNETOGRAM_MIN_VALUE) * 255
         data2 = data2.astype(np.uint8)
         image2 = Image.fromarray(data2)
-        image2 = center_crop(image2, 224, 224)
+        image2 = center_crop(image2, IMAGE_SIZE, IMAGE_SIZE)
         data2 = np.array(image2, dtype=np.float32) / 255.0
         data_stack = np.stack([data1, data2], axis=-1)
         if sunspot_id >= 5800:
@@ -101,33 +101,25 @@ def generate_tfrecord(type, data, tfrecord_file):
 if __name__ == '__main__':
 
     # train_alpha, valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
-    # print(len(train_alpha), len(valid_alpha))
     # train_beta, valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
-    # print(len(train_beta), len(valid_beta))
     # train_betax, valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
-    # print(len(train_betax), len(valid_betax))
 
 
-    # train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="magnetogram",
-    #                                     MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
-    # print(len(train_alpha), len(valid_alpha))
-    # train_beta, valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="magnetogram",
-    #                                     MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
-    # print(len(train_beta), len(valid_beta))
-    # train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="magnetogram",
-    #                                     MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
-    # print(len(train_betax), len(valid_betax))
+    train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="magnetogram",
+                                        MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
+    train_beta, valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="magnetogram",
+                                        MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
+    train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="magnetogram",
+                                        MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
 
 
-    train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
-                                        MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    print(len(train_alpha), len(valid_alpha))
-    train_beta, valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
-                                      MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    print(len(train_beta), len(valid_beta))
-    train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
-                                        MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    print(len(train_betax), len(valid_betax))
+    # train_alpha, valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
+    #                                     MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    # train_beta, valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
+    #                                   MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    # train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
+    #                                     MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+
     train_data = train_alpha + train_beta + train_betax
     valid_data = valid_alpha + valid_beta + valid_betax
     print(len(train_data), len(valid_data))
@@ -135,7 +127,7 @@ if __name__ == '__main__':
     np.random.shuffle(train_data)
     np.random.shuffle(valid_data)
     np.random.shuffle(valid_data)
-    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_continuum_320.tfrecord")
-    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_continuum_320.tfrecord")
+    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_magnetogram_%d.tfrecord"%IMAGE_SIZE)
+    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_magnetogram_%d.tfrecord"%IMAGE_SIZE)
 
 

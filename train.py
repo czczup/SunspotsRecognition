@@ -1,4 +1,5 @@
-from model import Model
+# from ResNet import Model
+from ResNeXt import Model
 import tensorflow as tf
 import time
 import os
@@ -14,7 +15,11 @@ CONTINUUM_MAX_VALUE = 73367
 CONTINUUM_MIN_VALUE = 206
 MAGNETOGRAM_MAX_VALUE = 2000
 MAGNETOGRAM_MIN_VALUE = -2000
-IMAGE_SIZE = 224
+IMAGE_SIZE = 320
+DATASET = 'continuum'
+# DATASET = 'magnetogram'
+# DATASET = 'all'
+
 
 def center_crop(image, x, y):
     width, height = image.size[0], image.size[1]
@@ -79,7 +84,7 @@ def read_and_decode_valid(filename):
 
 def load_train_set():
     with tf.name_scope('input_train'):
-        image_train, label_train = read_and_decode_train("dataset/tfrecord/train_continuum_%d.tfrecord"%IMAGE_SIZE)
+        image_train, label_train = read_and_decode_train("dataset/tfrecord/train_%s_%d.tfrecord"%(DATASET, IMAGE_SIZE))
         image_batch_train, label_batch_train = tf.train.shuffle_batch(
             [image_train, label_train], batch_size=batch_size, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
@@ -88,9 +93,9 @@ def load_train_set():
 
 def load_valid_set():
     with tf.name_scope('input_valid'):
-        image_valid, label_valid = read_and_decode_valid("dataset/tfrecord/valid_continuum_%d.tfrecord"%IMAGE_SIZE)
+        image_valid, label_valid = read_and_decode_valid("dataset/tfrecord/valid_%s_%d.tfrecord"%(DATASET, IMAGE_SIZE))
         image_batch_valid, label_batch_valid = tf.train.shuffle_batch(
-            [image_valid, label_valid], batch_size=512, capacity=5120, num_threads=4, min_after_dequeue=3000
+            [image_valid, label_valid], batch_size=batch_size, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
     return image_batch_valid, label_batch_valid
 
@@ -158,16 +163,24 @@ def train(model):
 
     image_batch_train, label_batch_train = load_train_set()
     image_batch_valid, label_batch_valid = load_valid_set()
-
-    # valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
-    # valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
-    # valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
-    valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
-                           MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
-                          MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
-    valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
-                           MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    if DATASET == 'all':
+        valid_alpha = get_all_data(path="dataset/trainset", sunspot_type="alpha")
+        valid_beta = get_all_data(path="dataset/trainset", sunspot_type="beta")
+        valid_betax = get_all_data(path="dataset/trainset", sunspot_type="betax")
+    elif DATASET == 'continuum':
+        valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="continuum",
+                               MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+        valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="continuum",
+                              MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+        valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
+                               MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
+    elif DATASET == 'magnetogram':
+        valid_alpha = get_data(path="dataset/trainset", sunspot_type="alpha", data_type="magnetogram",
+                               MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
+        valid_beta = get_data(path="dataset/trainset", sunspot_type="beta", data_type="magnetogram",
+                              MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
+        valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="magnetogram",
+                               MIN_VALUE=MAGNETOGRAM_MIN_VALUE, MAX_VALUE=MAGNETOGRAM_MAX_VALUE)
     valid_data = valid_alpha + valid_beta + valid_betax
 
     # Adaptive use of GPU memory.
@@ -223,6 +236,8 @@ def train(model):
                 print("Save the model Successfully")
                 saver.save(sess, "models/"+dirId+"/model.ckpt", global_step=step)
                 test(valid_data, sess, model)
+            # if step == 1500:
+            #     break
     coord.request_stop()
     coord.join(threads)
 

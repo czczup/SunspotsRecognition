@@ -5,7 +5,7 @@ import os
 import warnings
 from tqdm import tqdm
 from PIL import Image
-from model import Model
+from ResNet import Model
 
 warnings.filterwarnings('ignore')
 type2id = {"alpha": 0, "beta": 1, "betax": 2}
