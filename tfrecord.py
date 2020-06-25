@@ -40,7 +40,7 @@ def get_data(path, sunspot_type, data_type, MIN_VALUE, MAX_VALUE):
         data = (data - MIN_VALUE) / (MAX_VALUE - MIN_VALUE) * 255
         data = data.astype(np.uint8)
         image = Image.fromarray(data)
-        image = center_crop(image, 224, 224)
+        image = center_crop(image, 320, 320)
         data = np.array(image, dtype=np.float32) / 255.0
         if sunspot_id >= 5800:
             valid_data.append([data, type2id[sunspot_type]])
@@ -128,19 +128,6 @@ if __name__ == '__main__':
     train_betax, valid_betax = get_data(path="dataset/trainset", sunspot_type="betax", data_type="continuum",
                                         MIN_VALUE=CONTINUUM_MIN_VALUE, MAX_VALUE=CONTINUUM_MAX_VALUE)
     print(len(train_betax), len(valid_betax))
-
-
-    len_train_alpha = len(train_alpha)
-    len_train_beta = len(train_beta)
-    len_train_betax = len(train_betax)
-    max_class_num = max(len_train_alpha, max(len_train_beta, len_train_betax))
-    for i in range(max_class_num - len_train_alpha):
-        train_alpha.append(train_alpha[random.randint(0, len_train_alpha)])
-    for i in range(max_class_num - len_train_beta):
-        train_beta.append(train_beta[random.randint(0, len_train_beta)])
-    for i in range(max_class_num - len_train_betax):
-        train_betax.append(train_betax[random.randint(0, len_train_betax)])
-    print(len(train_alpha), len(train_beta), len(train_betax))
     train_data = train_alpha + train_beta + train_betax
     valid_data = valid_alpha + valid_beta + valid_betax
     print(len(train_data), len(valid_data))
@@ -148,7 +135,7 @@ if __name__ == '__main__':
     np.random.shuffle(train_data)
     np.random.shuffle(valid_data)
     np.random.shuffle(valid_data)
-    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_continuum_oversample_224.tfrecord")
-    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_continuum_oversample_224.tfrecord")
+    generate_tfrecord("train", train_data, tfrecord_file="dataset/tfrecord/train_continuum_320.tfrecord")
+    generate_tfrecord("valid", valid_data, tfrecord_file="dataset/tfrecord/valid_continuum_320.tfrecord")
 
 

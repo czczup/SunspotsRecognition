@@ -14,7 +14,7 @@ CONTINUUM_MAX_VALUE = 73367
 CONTINUUM_MIN_VALUE = 206
 MAGNETOGRAM_MAX_VALUE = 2000
 MAGNETOGRAM_MIN_VALUE = -2000
-
+IMAGE_SIZE = 224
 
 def center_crop(image, x, y):
     width, height = image.size[0], image.size[1]
@@ -27,7 +27,22 @@ def center_crop(image, x, y):
     return image
 
 
-def read_and_decode(filename):
+def zoom(x: tf.Tensor) -> tf.Tensor:
+    # Generate 20 crop settings, ranging from a 1% to 20% crop.
+    scales = list(np.arange(0.8, 1.0, 0.01))
+    boxes = np.zeros((len(scales), 4))
+    for i, scale in enumerate(scales):
+        x1 = y1 = 0.5 - (0.5 * scale)
+        x2 = y2 = 0.5 + (0.5 * scale)
+        boxes[i] = [x1, y1, x2, y2]
+    def random_crop(img):
+        crops = tf.image.crop_and_resize([img], boxes=boxes, box_ind=np.zeros(len(scales)), crop_size=(IMAGE_SIZE, IMAGE_SIZE))
+        return crops[tf.random_uniform(shape=[], minval=0, maxval=len(scales), dtype=tf.int32)]
+    choice = tf.random_uniform(shape=[], minval=0., maxval=1., dtype=tf.float32)
+    return tf.cond(choice < 0.5, lambda: x, lambda: random_crop(x))
+
+
+def read_and_decode_train(filename):
     filename_queue = tf.train.string_input_producer([filename])
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
@@ -37,16 +52,34 @@ def read_and_decode(filename):
     }
     temp = tf.parse_single_example(serialized_example, feature_description)
     image = tf.decode_raw(temp['image'], tf.float32)
-    image = tf.reshape(image, [224, 224, 1])
+    image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 1])
     image = tf.image.random_flip_left_right(image) # 随机左右翻转
     image = tf.image.random_flip_up_down(image) # 随机上下翻转
+    # image = tf.image.rot90(image, tf.random_uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)) # 随机旋转
+    image = zoom(image)
     label = tf.cast(temp['label'], tf.int64)
     return image, label
 
 
+def read_and_decode_valid(filename):
+    filename_queue = tf.train.string_input_producer([filename])
+    reader = tf.TFRecordReader()
+    _, serialized_example = reader.read(filename_queue)
+    feature_description = {
+        'image': tf.FixedLenFeature([], tf.string),
+        'label': tf.FixedLenFeature([], tf.int64),
+    }
+    temp = tf.parse_single_example(serialized_example, feature_description)
+    image = tf.decode_raw(temp['image'], tf.float32)
+    image = tf.reshape(image, [IMAGE_SIZE, IMAGE_SIZE, 1])
+    label = tf.cast(temp['label'], tf.int64)
+    return image, label
+
+
+
 def load_train_set():
     with tf.name_scope('input_train'):
-        image_train, label_train = read_and_decode("dataset/tfrecord/train_continuum_oversample_224.tfrecord")
+        image_train, label_train = read_and_decode_train("dataset/tfrecord/train_continuum_%d.tfrecord"%IMAGE_SIZE)
         image_batch_train, label_batch_train = tf.train.shuffle_batch(
             [image_train, label_train], batch_size=batch_size, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
@@ -55,7 +88,7 @@ def load_train_set():
 
 def load_valid_set():
     with tf.name_scope('input_valid'):
-        image_valid, label_valid = read_and_decode("dataset/tfrecord/valid_continuum_oversample_224.tfrecord")
+        image_valid, label_valid = read_and_decode_valid("dataset/tfrecord/valid_continuum_%d.tfrecord"%IMAGE_SIZE)
         image_batch_valid, label_batch_valid = tf.train.shuffle_batch(
             [image_valid, label_valid], batch_size=512, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
@@ -77,9 +110,9 @@ def get_data(path, sunspot_type, data_type, MIN_VALUE, MAX_VALUE):
             data = (data - MIN_VALUE) / (MAX_VALUE - MIN_VALUE) * 255
             data = data.astype(np.uint8)
             image = Image.fromarray(data)
-            image = center_crop(image, 224, 224)
+            image = center_crop(image, IMAGE_SIZE, IMAGE_SIZE)
             data = np.array(image, dtype=np.float32) / 255.0
-            data = np.reshape(data, [224, 224, 1])
+            data = np.reshape(data, [IMAGE_SIZE, IMAGE_SIZE, 1])
             valid_data.append([data, type2id[sunspot_type]])
     return valid_data
 
@@ -99,7 +132,7 @@ def get_all_data(path, sunspot_type):
             data1 = (data1 - CONTINUUM_MIN_VALUE) / (CONTINUUM_MAX_VALUE - CONTINUUM_MIN_VALUE) * 255
             data1 = data1.astype(np.uint8)
             image1 = Image.fromarray(data1)
-            image1 = center_crop(image1, 224, 224)
+            image1 = center_crop(image1, IMAGE_SIZE, IMAGE_SIZE)
             data1 = np.array(image1, dtype=np.float32) / 255.0
 
             filepath2 = filepath1.replace("continuum", "magnetogram")
@@ -110,7 +143,7 @@ def get_all_data(path, sunspot_type):
             data2 = (data2 - MAGNETOGRAM_MIN_VALUE) / (MAGNETOGRAM_MAX_VALUE - MAGNETOGRAM_MIN_VALUE) * 255
             data2 = data2.astype(np.uint8)
             image2 = Image.fromarray(data2)
-            image2 = center_crop(image2, 224, 224)
+            image2 = center_crop(image2, IMAGE_SIZE, IMAGE_SIZE)
             data2 = np.array(image2, dtype=np.float32) / 255.0
 
             data_merge = np.stack([data1, data2], axis=-1)
