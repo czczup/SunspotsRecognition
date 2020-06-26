@@ -16,8 +16,8 @@ CONTINUUM_MIN_VALUE = 206
 MAGNETOGRAM_MAX_VALUE = 2000
 MAGNETOGRAM_MIN_VALUE = -2000
 IMAGE_SIZE = 320
-DATASET = 'continuum'
-# DATASET = 'magnetogram'
+# DATASET = 'continuum'
+DATASET = 'magnetogram'
 # DATASET = 'all'
 
 
@@ -95,7 +95,7 @@ def load_valid_set():
     with tf.name_scope('input_valid'):
         image_valid, label_valid = read_and_decode_valid("dataset/tfrecord/valid_%s_%d.tfrecord"%(DATASET, IMAGE_SIZE))
         image_batch_valid, label_batch_valid = tf.train.shuffle_batch(
-            [image_valid, label_valid], batch_size=batch_size, capacity=5120, num_threads=4, min_after_dequeue=3000
+            [image_valid, label_valid], batch_size=512, capacity=5120, num_threads=4, min_after_dequeue=3000
         )
     return image_batch_valid, label_batch_valid
 
@@ -232,12 +232,13 @@ def train(model):
                                                                                   amount // batch_size, acc_train,
                                                                                   acc_valid),
                       'time %.3fs' % (time.time() - time1))
-            if step % 100 == 0:
+            if step % 10 == 0:
                 print("Save the model Successfully")
                 saver.save(sess, "models/"+dirId+"/model.ckpt", global_step=step)
-                test(valid_data, sess, model)
-            # if step == 1500:
-            #     break
+                acc = test(valid_data, sess, model)
+                if acc >= 0.80:
+                    break
+            # if step == 1500: break
     coord.request_stop()
     coord.join(threads)
 
@@ -261,6 +262,7 @@ def test(data, sess, model):
     print("beta f1 score: %.4f" % f1_scores[1])
     print("betax f1 score: %.4f" % f1_scores[2])
     print("alpha f1 score: %.4f" % f1_scores[0])
+    return correct / len(data)
 
 
 def f1_score(outputs, labels):

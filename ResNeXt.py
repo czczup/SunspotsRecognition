@@ -2,14 +2,19 @@ import tensorflow as tf
 from functools import reduce
 from operator import mul
 import numpy as np
+slim = tf.contrib.slim
 
 
 class Model(object):
     def __init__(self):
         self.cardinality = 8
         self.res_block = 1
-        self.image = tf.placeholder(tf.float32, [None, 320, 320, 1], name='image')
+        self.batch_size = 256
+        self.batch_size = 256
+        self.amount = 12492
+        self.step_per_epoch = self.amount // self.batch_size
 
+        self.image = tf.placeholder(tf.float32, [None, 320, 320, 1], name='image')
         with tf.name_scope("label"):
             self.label = tf.placeholder(tf.int32, [None], name='label')
             self.one_hot = tf.one_hot(indices=self.label, depth=3, name='one_hot')
@@ -21,7 +26,6 @@ class Model(object):
 
         self.loss = self.get_loss(self.output, self.one_hot)
 
-        self.batch_size = 256
         with tf.name_scope('correct_prediction'):
             correct_prediction = tf.equal(tf.argmax(self.output, 1), tf.argmax(self.one_hot, 1))
         with tf.name_scope('accuracy'):
@@ -30,7 +34,8 @@ class Model(object):
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.optimizer = tf.train.AdamOptimizer(1e-5).minimize(self.loss, global_step=self.global_step)
+            self.optimizer = tf.train.GradientDescentOptimizer(1E-5).minimize(self.loss, global_step=self.global_step)
+            # learning_rate = tf.train.exponential_decay(1E-3, global_step=self.global_step, decay_steps=self.step_per_epoch, decay_rate=0.9)
 
         self.merged = tf.summary.merge_all()
         print("网络初始化成功")
@@ -74,6 +79,7 @@ class Model(object):
     def split_layer(self, input_x, stride, layer_name):
         with tf.name_scope(layer_name):
             input_dim = int(np.shape(input_x)[-1])
+            print(input_dim//2)
             layers_split = list()
             for i in range(self.cardinality):
                 splits = self.transform_layer(input_x, stride=stride, depth=input_dim//2, scope=layer_name+'_splitN_'+str(i))
@@ -125,6 +131,52 @@ class Model(object):
             shape = variable.get_shape()
             num_params += reduce(mul, [dim.value for dim in shape], 1)
         return num_params
+
+    def combined_static_and_dynamic_shape(self, tensor):
+        static_tensor_shape = tensor.shape.as_list()
+        dynamic_tensor_shape = tf.shape(tensor)
+        combined_shape = []
+        for index, dim in enumerate(static_tensor_shape):
+            if dim is not None:
+                combined_shape.append(dim)
+            else:
+                combined_shape.append(dynamic_tensor_shape[index])
+        return combined_shape
+
+    def convolutional_block_attention_module(self, feature_map, index, inner_units_ratio=0.5):
+        with tf.variable_scope("cbam_%s" % (index)):
+            feature_map_shape = self.combined_static_and_dynamic_shape(feature_map)
+            # channel attention
+            channel_avg_weights = tf.nn.avg_pool(value=feature_map, ksize=[1, feature_map_shape[1], feature_map_shape[2], 1],
+                                                 strides=[1, 1, 1, 1], padding='VALID')
+            channel_max_weights = tf.nn.max_pool(value=feature_map, ksize=[1, feature_map_shape[1], feature_map_shape[2], 1],
+                                                 strides=[1, 1, 1, 1], padding='VALID')
+            channel_avg_reshape = tf.reshape(channel_avg_weights, [feature_map_shape[0], 1, feature_map_shape[3]])
+            channel_max_reshape = tf.reshape(channel_max_weights, [feature_map_shape[0], 1, feature_map_shape[3]])
+            channel_w_reshape = tf.concat([channel_avg_reshape, channel_max_reshape], axis=1)
+
+            fc_1 = tf.layers.dense(inputs=channel_w_reshape, units=feature_map_shape[3] * inner_units_ratio,
+                                   name="fc_1", activation=tf.nn.relu)
+            fc_2 = tf.layers.dense(inputs=fc_1, units=feature_map_shape[3], name="fc_2", activation=None)
+            channel_attention = tf.reduce_sum(fc_2, axis=1, name="channel_attention_sum")
+            channel_attention = tf.nn.sigmoid(channel_attention, name="channel_attention_sum_sigmoid")
+            channel_attention = tf.reshape(channel_attention, shape=[feature_map_shape[0], 1, 1, feature_map_shape[3]])
+            feature_map_with_channel_attention = tf.multiply(feature_map, channel_attention)
+            # spatial attention
+            channel_wise_avg_pooling = tf.reduce_mean(feature_map_with_channel_attention, axis=3)
+            channel_wise_max_pooling = tf.reduce_max(feature_map_with_channel_attention, axis=3)
+
+            channel_wise_avg_pooling = tf.reshape(channel_wise_avg_pooling, shape=[feature_map_shape[0], feature_map_shape[1],
+                                                  feature_map_shape[2], 1])
+            channel_wise_max_pooling = tf.reshape(channel_wise_max_pooling, shape=[feature_map_shape[0], feature_map_shape[1],
+                                                  feature_map_shape[2], 1])
+
+            channel_wise_pooling = tf.concat([channel_wise_avg_pooling, channel_wise_max_pooling], axis=3)
+            spatial_attention = slim.conv2d(channel_wise_pooling, 1, [7, 7], padding='SAME',
+                                            activation_fn=tf.nn.sigmoid, scope="spatial_attention_conv")
+            feature_map_with_attention = tf.multiply(feature_map_with_channel_attention, spatial_attention)
+            return feature_map_with_attention
+
 
 
 if __name__ == '__main__':
